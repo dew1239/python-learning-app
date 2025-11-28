@@ -629,11 +629,15 @@ elif page == "Lessons":
             st.session_state.lesson_envs[key] = {"globals": {}, "locals": {}}
             st.success("รีเซ็ตสภาพแวดล้อมเรียบร้อย")
 
-
 elif page == "Quiz":
     st.title("📝 แบบทดสอบท้ายบท ")
-    key = st.selectbox("เลือกบทเรียนสำหรับทำ Quiz", list(lessons.keys()), format_func=lambda k: lessons[k]["title"])
+    key = st.selectbox(
+        "เลือกบทเรียนสำหรับทำ Quiz",
+        list(lessons.keys()),
+        format_func=lambda k: lessons[k]["title"]
+    )
     questions = lessons[key].get("quiz", [])
+
     if not questions:
         st.info("บทเรียนนี้ยังไม่มีคำถาม")
     else:
@@ -642,22 +646,23 @@ elif page == "Quiz":
             st.write(f"**คำถามที่ {i+1}: {q['question']}**")
             choice = st.radio("เลือกคำตอบ", q["choices"], key=f"{key}_{i}")
             user_answers.append((q, choice))
-        if st.button("ส่งคำตอบและบันทึกผล"):
-    score = sum(1 for q, c in user_answers if c == q["answer"])
-    max_score = len(questions)
 
-    # ถ้าไม่กรอกชื่อ ให้เตือน (ยังบันทึกได้ แต่จะติดป้าย)
-    name_for_save = st.session_state.get("user_name", "").strip() or "(ไม่ระบุ)"
+        # ปุ่มส่งคำตอบ (สังเกตว่าบล็อกต่อจาก if ต้อง 'ย่อหน้า' เข้าไป)
+        if st.button("ส่งคำตอบและบันทึกผล", key=f"submit_{key}"):
+            score = sum(1 for q, c in user_answers if c == q["answer"])
+            max_score = len(questions)
 
-    st.success(f"คุณได้ {score} / {max_score} คะแนน 🎉")
-    history.append({
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "lesson": key,
-        "score": score,
-        "max_score": max_score,
-        "user": name_for_save,          # <<<< เพิ่มคีย์ user เข้าไป
-    })
-    save_history(history)
+            name_for_save = st.session_state.get("user_name", "").strip() or "(ไม่ระบุ)"
+
+            st.success(f"คุณได้ {score} / {max_score} คะแนน 🎉")
+            history.append({
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "lesson": key,
+                "score": score,
+                "max_score": max_score,
+                "user": name_for_save,   # เก็บชื่อผู้ทำแบบทดสอบ
+            })
+            save_history(history)
 
 
 elif page == "Dashboard":
@@ -665,19 +670,32 @@ elif page == "Dashboard":
     if not history:
         st.info("ยังไม่มีบันทึกผลการทดสอบ")
     else:
-        df = pd.DataFrame(history)
-        df_disp = df.copy()
-        df_disp["ร้อยละ (%)"] = (df_disp["score"] / df_disp["max_score"] * 100).round(2)
-        df_disp.rename(columns={
-            "timestamp": "วันที่-เวลา",
-            "lesson": "บทเรียน",
-            "score": "คะแนน",
-            "max_score": "เต็ม",
-        }, inplace=True)
-        st.dataframe(df_disp[["วันที่-เวลา", "บทเรียน", "คะแนน", "เต็ม", "ร้อยละ (%)"]])
+        # แปลง/จัดคอลัมน์ พร้อมเติมชื่อกรณีเรคอร์ดเก่า
+        rows = []
+        for h in history:
+            rows.append({
+                "วันที่-เวลา": h.get("timestamp"),
+                "ผู้ใช้": h.get("user", "(ไม่ระบุ)"),
+                "บทเรียน": lessons[h["lesson"]]["title"] if h.get("lesson") in lessons else h.get("lesson"),
+                "คะแนน": h.get("score", 0),
+                "เต็ม": h.get("max_score", 0),
+                "ร้อยละ (%)": round(h.get("score", 0) / h.get("max_score", 1) * 100, 2) if h.get("max_score") else 0.0,
+            })
+        df = pd.DataFrame(rows)
+
+        # ตัวกรองตามชื่อผู้ใช้
+        names = ["ทั้งหมด"] + sorted(df["ผู้ใช้"].unique().tolist())
+        sel = st.selectbox("กรองตามผู้ใช้", names)
+        if sel != "ทั้งหมด":
+            df = df[df["ผู้ใช้"] == sel]
+
+        st.dataframe(df[["วันที่-เวลา", "ผู้ใช้", "บทเรียน", "คะแนน", "เต็ม", "ร้อยละ (%)"]], use_container_width=True)
+
         st.write("### 📈 สรุปผลรวม")
-        st.write(f"- จำนวนครั้งที่ทำแบบทดสอบ: **{len(df_disp)}**")
-        st.write(f"- คะแนนเฉลี่ย: **{df_disp['ร้อยละ (%)'].mean():.2f}%**")
+        st.write(f"- จำนวนครั้งที่ทำแบบทดสอบ: **{len(df)}**")
+        st.write(f"- คะแนนเฉลี่ย: **{df['ร้อยละ (%)'].mean():.2f}%**")
+
+
 
 
 
