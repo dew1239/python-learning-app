@@ -535,6 +535,11 @@ print(Counter.is_even(10))   # True
 # ============================
 st.set_page_config(page_title="Python Learning App — Detailed", layout="wide")
 st.sidebar.title("📚 เมนูหลัก")
+# --- ชื่อผู้ใช้สำหรับบันทึกสถิติ ---
+default_name = st.session_state.get("user_name", "")
+user_name = st.sidebar.text_input("👤 ชื่อผู้ทำแบบทดสอบ", value=default_name, placeholder="เช่น สุนันทา / Sunanta")
+# อัปเดต session_state ตลอด
+st.session_state.user_name = user_name.strip()
 page = st.sidebar.radio("เลือกหน้า", ["Home", "Lessons", "Quiz", "Dashboard"])
 history = load_history()
 
@@ -667,4 +672,5 @@ elif page == "Dashboard":
         st.write("### 📈 สรุปผลรวม")
         st.write(f"- จำนวนครั้งที่ทำแบบทดสอบ: **{len(df_disp)}**")
         st.write(f"- คะแนนเฉลี่ย: **{df_disp['ร้อยละ (%)'].mean():.2f}%**")
+
 
