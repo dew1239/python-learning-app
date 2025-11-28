@@ -643,16 +643,22 @@ elif page == "Quiz":
             choice = st.radio("เลือกคำตอบ", q["choices"], key=f"{key}_{i}")
             user_answers.append((q, choice))
         if st.button("ส่งคำตอบและบันทึกผล"):
-            score = sum(1 for q, c in user_answers if c == q["answer"])
-            max_score = len(questions)
-            st.success(f"คุณได้ {score} / {max_score} คะแนน 🎉")
-            history.append({
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "lesson": key,
-                "score": score,
-                "max_score": max_score
-            })
-            save_history(history)
+    score = sum(1 for q, c in user_answers if c == q["answer"])
+    max_score = len(questions)
+
+    # ถ้าไม่กรอกชื่อ ให้เตือน (ยังบันทึกได้ แต่จะติดป้าย)
+    name_for_save = st.session_state.get("user_name", "").strip() or "(ไม่ระบุ)"
+
+    st.success(f"คุณได้ {score} / {max_score} คะแนน 🎉")
+    history.append({
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "lesson": key,
+        "score": score,
+        "max_score": max_score,
+        "user": name_for_save,          # <<<< เพิ่มคีย์ user เข้าไป
+    })
+    save_history(history)
+
 
 elif page == "Dashboard":
     st.title("📊 สถิติของคุณ")
@@ -672,5 +678,6 @@ elif page == "Dashboard":
         st.write("### 📈 สรุปผลรวม")
         st.write(f"- จำนวนครั้งที่ทำแบบทดสอบ: **{len(df_disp)}**")
         st.write(f"- คะแนนเฉลี่ย: **{df_disp['ร้อยละ (%)'].mean():.2f}%**")
+
 
 
