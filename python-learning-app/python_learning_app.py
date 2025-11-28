@@ -539,7 +539,7 @@ page = st.sidebar.radio("เลือกหน้า", ["Home", "Lessons", "Quiz
 history = load_history()
 
 if page == "Home":
-    st.title("🐍 Python Learning App (Detailed Edition)")
+    st.title("🐍 Python Learning App ")
     st.write(
         "ฉบับละเอียด: บทเรียนทุกหัวข้อมี Objectives, Key ideas, Examples, Pitfalls, "
         "และแบบฝึก Try it + Quiz เพื่อทบทวนความเข้าใจ"
@@ -548,7 +548,7 @@ if page == "Home":
 
 
 elif page == "Lessons":
-    st.title("📘 บทเรียน Python (รายละเอียดเต็ม)")
+    st.title("📘 บทเรียน Python ")
     key = st.selectbox("เลือกบทเรียน", list(lessons.keys()), format_func=lambda k: lessons[k]["title"])
     st.subheader(lessons[key]["title"])
     st.markdown(lessons[key]["content"])
@@ -626,7 +626,7 @@ elif page == "Lessons":
 
 
 elif page == "Quiz":
-    st.title("📝 แบบทดสอบท้ายบท (Detailed)")
+    st.title("📝 แบบทดสอบท้ายบท ")
     key = st.selectbox("เลือกบทเรียนสำหรับทำ Quiz", list(lessons.keys()), format_func=lambda k: lessons[k]["title"])
     questions = lessons[key].get("quiz", [])
     if not questions:
@@ -667,3 +667,4 @@ elif page == "Dashboard":
         st.write("### 📈 สรุปผลรวม")
         st.write(f"- จำนวนครั้งที่ทำแบบทดสอบ: **{len(df_disp)}**")
         st.write(f"- คะแนนเฉลี่ย: **{df_disp['ร้อยละ (%)'].mean():.2f}%**")
+
