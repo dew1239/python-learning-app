@@ -146,33 +146,6 @@ def corner_chat():
             )
             + "max-height: 65vh; overflow: auto;"
         )
-def _corner_send():
-    txt = st.session_state.get("corner_chat_text", "").strip()
-    if not txt:
-        return
-
-    st.session_state.corner_chat_msgs.append({"role": "user", "content": txt})
-
-    ctx = st.session_state.get("app_ctx", {"page": "unknown"})
-    ans = _ask_gemini(ctx, st.session_state.corner_chat_msgs, txt)
-    st.session_state.corner_chat_msgs.append({"role": "assistant", "content": ans})
-
-    # เคลียร์ช่องพิมพ์ (ทำใน callback = ไม่ error)
-    st.session_state.corner_chat_text = ""
-
-def _corner_clear():
-    st.session_state.corner_chat_msgs = []
-    st.session_state.corner_chat_text = ""
-
-# --- UI ---
-st.text_input("พิมพ์ข้อความ…", key="corner_chat_text")
-
-c1, c2 = st.columns([1, 1])
-with c1:
-    st.button("ส่ง", key="corner_chat_send", use_container_width=True, on_click=_corner_send)
-with c2:
-    st.button("ล้างแชท", key="corner_chat_clear", use_container_width=True, on_click=_corner_clear)
-
 # ============================
 # จัดการไฟล์สถิติ
 # ============================
@@ -891,6 +864,7 @@ elif page == "Dashboard":
         st.bar_chart(by_lesson.set_index("บทเรียน"))
 
 corner_chat()
+
 
 
 
