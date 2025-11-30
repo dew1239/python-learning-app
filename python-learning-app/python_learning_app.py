@@ -4,6 +4,193 @@ import os
 from datetime import datetime
 import pandas as pd
 import io, contextlib, traceback
+import requests
+
+# ---------- Helper: ต่อ system prompt ตามโหมด ----------
+def build_system_prompt(mode: str, *, lesson_title: str = "", level: str = "beginner",
+                        hint_first: bool = True, formal_tone: bool = False, language: str = "th") -> str:
+    # ภาษา
+    lang_line = "ตอบเป็นภาษาไทย" if language == "th" else "Answer in English"
+
+    # โทน
+    tone = "ทางการ สุภาพ กระชับ" if formal_tone else "เป็นกันเอง เข้าใจง่าย แต่ยังคงความถูกต้อง"
+
+    # โหมด
+    modes = {
+        "Tutor (Socratic)": (
+            "เน้นถามนำทีละขั้น ไม่เฉลยทันที ให้ผู้เรียนคิดเองก่อน "
+            "เมื่อผู้เรียนขอเฉลย ค่อยเฉลยพร้อมเหตุผลย่อ "
+        ),
+        "Hint-first": (
+            "ให้คำใบ้สั้น ๆ ก่อน (1-3 บรรทัด) จากนั้นจึงอธิบายเพิ่มตามคำขอ "
+            "หลีกเลี่ยงการให้โค้ดเต็มตั้งแต่แรก"
+        ),
+        "Exam-practice": (
+            "จำลองสถานการณ์สอบ: อย่าเฉลยเต็มทันที ให้โครงร่างวิธีคิด/สูตร/ขั้นตอน "
+            "และถามย้ำจุดที่ผู้เรียนยังไม่เข้าใจ ก่อนเสนอเฉลยฉบับเต็ม"
+        ),
+        "Debug-coach": (
+            "ทำหน้าที่โค้ชดีบัก: ขอ error/traceback/ตัวอย่างอินพุตที่พัง "
+            "วิเคราะห์สาเหตุเป็นข้อ ๆ แล้วเสนอทางแก้แบบ minimal change"
+        ),
+        "Explain-code": (
+            "อธิบายโค้ดทีละบรรทัด/บล็อก จุดประสงค์ อินพุต-เอาท์พุต ความซับซ้อน และกรณี edge cases"
+        ),
+        "Strict-Thai-Academic": (
+            "ใช้ภาษาไทยทางการ อ้างอิงแนวคิด/คำจำกัดความตามแบบเรียน ยกตัวอย่างสั้น ๆ "
+            "หลีกเลี่ยงสแลงหรืออีโมจิ จัดคำอธิบายเป็นข้อ ๆ ชัดเจน"
+        ),
+    }
+    mode_line = modes.get(mode, modes["Tutor (Socratic)"])
+
+    # บริบทบทเรียน
+    ctx = f"เนื้อหาบทเรียนปัจจุบัน: {lesson_title}" if lesson_title else "ไม่มีบริบทบทเรียนเฉพาะ"
+
+    # ระดับความยาก
+    lv_map = {
+        "beginner": "ผู้เริ่มต้น: อธิบายช้า ๆ ตัวอย่างง่าย โค้ดสั้น",
+        "intermediate": "ระดับกลาง: อธิบายกระชับ เน้นแนวคิดและรูปแบบที่ถูกต้อง",
+        "advanced": "ขั้นสูง: อธิบายเชิงลึก กล่าวถึง trade-offs และประสิทธิภาพ"
+    }
+    lv_line = lv_map.get(level, lv_map["beginner"])
+
+    # นโยบาย “ไม่เฉลยทันที”
+    policy = "อย่าให้เฉลยเต็ม/โค้ดเต็มทันที ให้คำใบ้ก่อน" if hint_first else "อนุญาตให้ให้เฉลยเต็มได้หากผู้เรียนร้องขอ"
+
+    system = (
+        f"คุณคือผู้ช่วยสอนวิชา Python แบบโหมดการเรียนรู้ ({mode}). "
+        f"{lang_line} โทน: {tone}. {lv_line}. {policy}. "
+        f"{mode_line} บริบท: {ctx}. "
+        "ถ้าต้องใช้โค้ด ให้สั้น กระชับ และแยกเป็นบล็อกที่รันได้จริง."
+    )
+    return system
+
+# ---------- เก็บ config โหมดไว้ใน session ----------
+if "chat_cfg" not in st.session_state:
+    st.session_state.chat_cfg = {
+        "mode": "Tutor (Socratic)",
+        "level": "beginner",
+        "hint_first": True,
+        "formal_tone": False,
+        "language": "th",
+    }
+
+# ---------- UI ปุ่มมุมขวา (Popover) เปิด-ปิดได้ตลอด ----------
+right = st.container()
+cols = right.columns([1,1,1,1,1,1,1,1,1,1,1,2])
+with cols[-1]:
+    pop = st.popover("💬 Chatbot", use_container_width=True)
+    with pop:
+        # ดึงชื่อผู้ใช้ (ถ้าคุณเก็บใน session_state.user_name อยู่แล้ว)
+        display_name = st.session_state.get("user_name", "").strip() or "(ไม่ระบุชื่อ)"
+
+        # คีย์บทเรียนปัจจุบัน ถ้าอยู่หน้า Lessons
+        current_lesson_title = ""
+        try:
+            if page == "Lessons":
+                # ตัวแปร key มาจาก selectbox เลือกบทเรียน
+                current_lesson_title = lessons.get(key, {}).get("title", "")
+        except Exception:
+            pass
+
+        st.markdown("#### ⚙️ Learning Mode")
+        c1, c2 = st.columns(2)
+        with c1:
+            mode = st.selectbox(
+                "โหมด", ["Tutor (Socratic)", "Hint-first", "Exam-practice", "Debug-coach", "Explain-code", "Strict-Thai-Academic"],
+                index=["Tutor (Socratic)", "Hint-first", "Exam-practice", "Debug-coach", "Explain-code", "Strict-Thai-Academic"]
+                      .index(st.session_state.chat_cfg.get("mode","Tutor (Socratic)")),
+                key="cfg_mode"
+            )
+            level = st.selectbox(
+                "ระดับ", ["beginner","intermediate","advanced"],
+                index=["beginner","intermediate","advanced"].index(st.session_state.chat_cfg.get("level","beginner")),
+                key="cfg_level"
+            )
+        with c2:
+            hint_first = st.checkbox("ให้คำใบ้ก่อนเฉลย", value=st.session_state.chat_cfg.get("hint_first", True), key="cfg_hint")
+            formal_tone = st.checkbox("ภาษาไทยทางการ", value=st.session_state.chat_cfg.get("formal_tone", False), key="cfg_formal")
+            lang = st.radio("ภาษา", ["th","en"], index=0 if st.session_state.chat_cfg.get("language","th")=="th" else 1, horizontal=True, key="cfg_lang")
+
+        # ตั้งค่า API เบื้องต้น (ผู้ใช้ปรับได้)
+        with st.expander("🌐 ตั้งค่า API", expanded=False):
+            base = st.text_input("Base URL", value=os.getenv("OPENAI_BASE", "https://api.openai.com/v1"), key="chat_base")
+            model = st.text_input("Model", value=os.getenv("OPENAI_MODEL", "gpt-4o-mini"), key="chat_model")
+            temp = st.slider("Temperature", 0.0, 1.5, float(os.getenv("OPENAI_TEMPERATURE", "0.7")), 0.1, key="chat_temp")
+            st.caption("ใส่ OPENAI_API_KEY ใน Secrets/Environment")
+
+        # ถ้า config เปลี่ยน → รีเซ็ตระบบให้เริ่มบทสนทนาใหม่ด้วย system prompt โหมดนั้น
+        new_cfg = {"mode": mode, "level": level, "hint_first": hint_first, "formal_tone": formal_tone, "language": lang}
+        cfg_changed = (new_cfg != st.session_state.chat_cfg)
+
+        if "chat_history" not in st.session_state or cfg_changed:
+            st.session_state.chat_cfg = new_cfg
+            sys_prompt = build_system_prompt(
+                mode, lesson_title=current_lesson_title, level=level,
+                hint_first=hint_first, formal_tone=formal_tone, language=lang
+            )
+            st.session_state.chat_history = [{"role": "system", "content": sys_prompt}]
+
+        # แสดงชื่อผู้ใช้
+        st.caption(f"ผู้ใช้: {display_name}")
+
+        # แสดงประวัติ (ยกเว้น system)
+        for msg in st.session_state.chat_history:
+            if msg["role"] == "system":
+                continue
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+        # กล่องพิมพ์
+        utext = st.chat_input("ถามบอทที่นี่…", key="chat_input_learning")
+        if utext:
+            st.session_state.chat_history.append({"role": "user", "content": utext})
+            with st.chat_message("user"):
+                st.markdown(utext)
+
+            with st.chat_message("assistant"):
+                with st.spinner("กำลังตอบ…"):
+                    # ส่ง history ท้าย ๆ เพื่อจำกัดโทเค็น
+                    reply = call_external_chat_api(
+                        st.session_state.chat_history[-12:],
+                        base=base, model=model, temperature=temp
+                    )
+                    st.markdown(reply)
+            st.session_state.chat_history.append({"role": "assistant", "content": reply})
+
+        # ปุ่มล้าง/บันทึก
+        c3, c4 = st.columns(2)
+        with c3:
+            if st.button("🧹 ล้างบทสนทนา", use_container_width=True, key="chat_clear"):
+                sys_prompt = build_system_prompt(
+                    st.session_state.chat_cfg["mode"],
+                    lesson_title=current_lesson_title,
+                    level=st.session_state.chat_cfg["level"],
+                    hint_first=st.session_state.chat_cfg["hint_first"],
+                    formal_tone=st.session_state.chat_cfg["formal_tone"],
+                    language=st.session_state.chat_cfg["language"]
+                )
+                st.session_state.chat_history = [{"role": "system", "content": sys_prompt}]
+                st.experimental_rerun()
+        with c4:
+            if st.button("💾 บันทึกเป็นสถิติ", use_container_width=True, key="chat_save"):
+                convo_text = []
+                for m in st.session_state.chat_history:
+                    if m["role"] == "system": 
+                        continue
+                    prefix = "ผู้ใช้" if m["role"] == "user" else "บอท"
+                    convo_text.append(f"{prefix}: {m['content']}")
+                history.append({
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "lesson": "chatbot(learning-mode)",
+                    "score": 0, "max_score": 0,
+                    "user": display_name,
+                    "transcript": "\n".join(convo_text),
+                    "mode": st.session_state.chat_cfg["mode"],
+                    "level": st.session_state.chat_cfg["level"]
+                })
+                save_history(history)
+                st.success("บันทึกแล้วที่ history.json (lesson='chatbot(learning-mode)')")
 
 # ============================
 # จัดการไฟล์สถิติ
@@ -694,6 +881,7 @@ elif page == "Dashboard":
         st.write("### 📈 สรุปผลรวม")
         st.write(f"- จำนวนครั้งที่ทำแบบทดสอบ: **{len(df)}**")
         st.write(f"- คะแนนเฉลี่ย: **{df['ร้อยละ (%)'].mean():.2f}%**")
+
 
 
 
