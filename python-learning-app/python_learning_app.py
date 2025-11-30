@@ -629,10 +629,8 @@ elif page == "Lessons":
             st.session_state.lesson_envs[key] = {"globals": {}, "locals": {}}
             st.success("รีเซ็ตสภาพแวดล้อมเรียบร้อย")
 
-
 elif page == "Quiz":
     st.title("📝 แบบทดสอบท้ายบท ")
-    key = st.selectbox("เลือกบทเรียนสำหรับทำ Quiz", list(lessons.keys()), format_func=lambda k: lessons[k]["title"])
     key = st.selectbox(
         "เลือกบทเรียนสำหรับทำ Quiz",
         list(lessons.keys()),
@@ -648,38 +646,21 @@ elif page == "Quiz":
             st.write(f"**คำถามที่ {i+1}: {q['question']}**")
             choice = st.radio("เลือกคำตอบ", q["choices"], key=f"{key}_{i}")
             user_answers.append((q, choice))
-        if st.button("ส่งคำตอบและบันทึกผล"):
-    score = sum(1 for q, c in user_answers if c == q["answer"])
-    max_score = len(questions)
 
-    # ถ้าไม่กรอกชื่อ ให้เตือน (ยังบันทึกได้ แต่จะติดป้าย)
-    name_for_save = st.session_state.get("user_name", "").strip() or "(ไม่ระบุ)"
-        # ปุ่มส่งคำตอบ (สังเกตว่าบล็อกต่อจาก if ต้อง 'ย่อหน้า' เข้าไป)
-        if st.button("ส่งคำตอบและบันทึกผล", key=f"submit_{key}"):
+        if st.button("ส่งคำตอบและบันทึกผล"):
             score = sum(1 for q, c in user_answers if c == q["answer"])
             max_score = len(questions)
-
             name_for_save = st.session_state.get("user_name", "").strip() or "(ไม่ระบุ)"
 
-    st.success(f"คุณได้ {score} / {max_score} คะแนน 🎉")
-    history.append({
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "lesson": key,
-        "score": score,
-        "max_score": max_score,
-        "user": name_for_save,          # <<<< เพิ่มคีย์ user เข้าไป
-    })
-    save_history(history)
             st.success(f"คุณได้ {score} / {max_score} คะแนน 🎉")
             history.append({
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "lesson": key,
                 "score": score,
                 "max_score": max_score,
-                "user": name_for_save,   # เก็บชื่อผู้ทำแบบทดสอบ
+                "user": name_for_save,
             })
             save_history(history)
-
 
 elif page == "Dashboard":
     st.title("📊 สถิติของคุณ")
@@ -722,3 +703,4 @@ elif page == "Dashboard":
         st.write(f"- คะแนนเฉลี่ย: **{df_disp['ร้อยละ (%)'].mean():.2f}%**")
         st.write(f"- จำนวนครั้งที่ทำแบบทดสอบ: **{len(df)}**")
         st.write(f"- คะแนนเฉลี่ย: **{df['ร้อยละ (%)'].mean():.2f}%**")
+
