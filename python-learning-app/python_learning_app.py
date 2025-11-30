@@ -717,6 +717,7 @@ def set_app_context(page: str, user: str, lesson_key: str | None = None, extra: 
     if extra:
         ctx.update(extra)
     st.session_state.app_ctx = ctx
+require_gmail_only()
 # ============================
 # แอปหลัก Streamlit
 # ============================
@@ -901,6 +902,7 @@ elif page == "Dashboard":
         st.bar_chart(by_lesson.set_index("บทเรียน"))
 
 corner_chat()
+
 
 
 
