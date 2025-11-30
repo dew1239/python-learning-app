@@ -5,6 +5,7 @@ from datetime import datetime
 import pandas as pd
 import io, contextlib, traceback
 from google import genai
+from google.genai import types
 from streamlit_float import float_init, float_css_helper
 
 @st.cache_resource
@@ -66,7 +67,8 @@ def _ask_gemini(ctx: dict, messages: list[dict], user_text: str) -> str:
         "- ถ้า page=Dashboard ให้ช่วยอ่านสถิติและแนะนำสิ่งที่ควรทบทวน"
     )
 
-    client = _gemini_client()
+    client = get_gemini_client()
+    
     resp = client.models.generate_content(
         model="gemini-2.5-flash",
         contents=_build_prompt(ctx, messages, user_text),
@@ -109,23 +111,35 @@ def corner_chat():
                 with st.chat_message(m["role"]):
                     st.markdown(m["content"])
 
-            # input + send
+                    # ---------- callbacks ----------
+            if "corner_chat_to_send" not in st.session_state:
+                st.session_state.corner_chat_to_send = None
+
+            def _queue_send():
+                text = (st.session_state.corner_chat_text or "").strip()
+                if text:
+                    st.session_state.corner_chat_to_send = text
+                    st.session_state.corner_chat_text = ""  # เคลียร์ input แบบปลอดภัย (callback)
+
+            def _clear_chat():
+                st.session_state.corner_chat_msgs = []
+                st.session_state.corner_chat_text = ""
+                st.session_state.corner_chat_to_send = None
+
+            # input + buttons
             st.text_input("พิมพ์ข้อความ…", key="corner_chat_text")
             c1, c2 = st.columns([1, 1])
             with c1:
-                send = st.button("ส่ง", key="corner_chat_send", use_container_width=True)
+                st.button("ส่ง", key="corner_chat_send", use_container_width=True, on_click=_queue_send)
             with c2:
-                clear = st.button("ล้างแชท", key="corner_chat_clear", use_container_width=True)
+                st.button("ล้างแชท", key="corner_chat_clear", use_container_width=True, on_click=_clear_chat)
 
-            if clear:
-                st.session_state.corner_chat_msgs = []
-                st.session_state.corner_chat_text = ""
-                st.rerun()
+            # ถ้ามีข้อความที่ถูกคิวไว้ -> ค่อยเรียก LLM
+            if st.session_state.corner_chat_to_send:
+                user_text = st.session_state.corner_chat_to_send
+                st.session_state.corner_chat_to_send = None
 
-            if send and st.session_state.corner_chat_text.strip():
-                user_text = st.session_state.corner_chat_text.strip()
                 st.session_state.corner_chat_msgs.append({"role": "user", "content": user_text})
-                st.session_state.corner_chat_text = ""
 
                 ctx = st.session_state.get("app_ctx", {"page": "unknown"})
                 with st.spinner("กำลังคิด..."):
@@ -864,6 +878,7 @@ elif page == "Dashboard":
         st.bar_chart(by_lesson.set_index("บทเรียน"))
 
 corner_chat()
+
 
 
 
