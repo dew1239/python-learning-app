@@ -6,6 +6,42 @@ import pandas as pd
 import io, contextlib, traceback
 import requests
 
+
+def _get_secret(name: str, default=None):
+    # อ่านจาก st.secrets ก่อน (บน Streamlit Cloud), ถ้าไม่มีค่อยอ่านจาก env
+    try:
+        if hasattr(st, "secrets") and name in st.secrets:
+            return st.secrets[name]
+    except Exception:
+        pass
+    return os.getenv(name, default)
+
+def call_external_chat_api(messages, *, base=None, api_key=None, model=None, temperature=None, timeout=60):
+    """
+    เรียก API ภายนอกสไตล์ OpenAI /v1/chat/completions
+    - messages: [{"role":"system|user|assistant","content":"..."}]
+    ค่าดีฟอลต์อ่านจาก Secrets/Env:
+      OPENAI_BASE, OPENAI_API_KEY, OPENAI_MODEL, OPENAI_TEMPERATURE
+    """
+    base = base or _get_secret("OPENAI_BASE", "https://api.openai.com/v1")
+    api_key = api_key or _get_secret("OPENAI_API_KEY")
+    model = model or _get_secret("OPENAI_MODEL", "gpt-4o-mini")
+    temperature = float(temperature or _get_secret("OPENAI_TEMPERATURE", "0.7"))
+
+    if not api_key:
+        return "(ยังไม่ได้ตั้งค่า OPENAI_API_KEY ใน Secrets/Environment)"
+
+    url = f"{base.rstrip('/')}/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    payload = {"model": model, "messages": messages, "temperature": temperature}
+
+    try:
+        resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
+        resp.raise_for_status()
+        data = resp.json()
+        return data["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"(API error: {e})"
 # ---------- Helper: ต่อ system prompt ตามโหมด ----------
 def build_system_prompt(mode: str, *, lesson_title: str = "", level: str = "beginner",
                         hint_first: bool = True, formal_tone: bool = False, language: str = "th") -> str:
@@ -881,6 +917,7 @@ elif page == "Dashboard":
         st.write("### 📈 สรุปผลรวม")
         st.write(f"- จำนวนครั้งที่ทำแบบทดสอบ: **{len(df)}**")
         st.write(f"- คะแนนเฉลี่ย: **{df['ร้อยละ (%)'].mean():.2f}%**")
+
 
 
 
