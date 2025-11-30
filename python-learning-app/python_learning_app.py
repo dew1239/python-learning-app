@@ -4,7 +4,148 @@ import os
 from datetime import datetime
 import pandas as pd
 import io, contextlib, traceback
+from google import genai
+from streamlit_float import float_init, float_css_helper
 
+@st.cache_resource
+def get_gemini_client():
+    return genai.Client()  # จะอ่าน GEMINI_API_KEY / GOOGLE_API_KEY จาก env ได้ :contentReference[oaicite:4]{index=4}
+
+def gemini_reply(messages: list[dict], user_text: str, ctx: dict) -> str:
+    # ทำ transcript สั้น ๆ
+    transcript = []
+    for m in messages[-20:]:
+        transcript.append(f"{m['role'].upper()}: {m['content']}")
+    transcript_text = "\n".join(transcript)
+
+    system_inst = (
+        "คุณคือผู้ช่วยสอน Python ในแอป นี้ "
+        "ต้องตอบเป็นภาษาไทยเป็นหลัก, กระชับ, อ้างอิงบริบท (page/lesson) ที่ให้มา "
+        "ถ้าอยู่หน้า Lessons ให้สอนตามบทนั้นและยกตัวอย่างโค้ดสั้น ๆ "
+        "ถ้าอยู่หน้า Quiz ให้ช่วยอธิบายแนวคิด/วิธีคิด ไม่เฉลยถ้าผู้ใช้ไม่ขอ"
+    )
+
+    prompt = (
+        f"APP_CONTEXT_JSON:\n{json.dumps(ctx, ensure_ascii=False)}\n\n"
+        f"CHAT_TRANSCRIPT:\n{transcript_text}\n\n"
+        f"USER:\n{user_text}"
+    )
+
+    client = get_gemini_client()
+    resp = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=system_inst
+        ),
+    )
+    return resp.text or "(ไม่มีข้อความตอบกลับ)"
+def _build_prompt(ctx: dict, messages: list[dict], user_text: str) -> str:
+    # เก็บประวัติแชทสั้น ๆ กัน prompt ยาวเกิน
+    transcript = []
+    for m in messages[-20:]:
+        transcript.append(f"{m['role'].upper()}: {m['content']}")
+    transcript_text = "\n".join(transcript)
+
+    return (
+        "APP_CONTEXT_JSON:\n"
+        f"{json.dumps(ctx or {}, ensure_ascii=False)}\n\n"
+        "CHAT_TRANSCRIPT:\n"
+        f"{transcript_text}\n\n"
+        "USER:\n"
+        f"{user_text}"
+    )
+
+def _ask_gemini(ctx: dict, messages: list[dict], user_text: str) -> str:
+    system_inst = (
+        "คุณคือผู้ช่วยสอน Python ในแอป Streamlit นี้\n"
+        "- ตอบภาษาไทยเป็นหลัก กระชับ เข้าใจง่าย\n"
+        "- อ้างอิงบริบทจาก APP_CONTEXT_JSON เสมอ (เช่น page/lesson)\n"
+        "- ถ้า page=Lessons ให้สอนตาม lesson_title/lesson_excerpt และยกตัวอย่างโค้ดสั้น ๆ\n"
+        "- ถ้า page=Quiz ให้ช่วยอธิบายแนวคิด/วิธีคิด และจะไม่เฉลยตรง ๆ จนกว่าผู้ใช้จะขอ\n"
+        "- ถ้า page=Dashboard ให้ช่วยอ่านสถิติและแนะนำสิ่งที่ควรทบทวน"
+    )
+
+    client = _gemini_client()
+    resp = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=_build_prompt(ctx, messages, user_text),
+        config=types.GenerateContentConfig(system_instruction=system_inst),
+    )
+    return resp.text or "(ไม่มีข้อความตอบกลับ)"
+
+def corner_chat():
+    # state
+    if "corner_chat_open" not in st.session_state:
+        st.session_state.corner_chat_open = False
+    if "corner_chat_msgs" not in st.session_state:
+        st.session_state.corner_chat_msgs = []
+    if "corner_chat_text" not in st.session_state:
+        st.session_state.corner_chat_text = ""
+
+    # ===== 1) ปุ่มลอยมุมขวาล่าง =====
+    fab = st.container()
+    with fab:
+        if st.button("💬", key="corner_chat_fab", help="เปิด/ปิดแชท"):
+            st.session_state.corner_chat_open = not st.session_state.corner_chat_open
+            st.rerun()
+
+    fab.float(float_css_helper(right="1rem", bottom="1rem", width="3.2rem"))
+
+    # ===== 2) กล่องแชทลอย =====
+    if st.session_state.corner_chat_open:
+        box = st.container()
+        with box:
+            top = st.columns([1, 1])
+            with top[0]:
+                st.markdown("**💬 Chat**")
+            with top[1]:
+                if st.button("✖ ปิด", key="corner_chat_close"):
+                    st.session_state.corner_chat_open = False
+                    st.rerun()
+
+            # แสดงข้อความย้อนหลัง
+            for m in st.session_state.corner_chat_msgs:
+                with st.chat_message(m["role"]):
+                    st.markdown(m["content"])
+
+            # input + send
+            st.text_input("พิมพ์ข้อความ…", key="corner_chat_text")
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                send = st.button("ส่ง", key="corner_chat_send", use_container_width=True)
+            with c2:
+                clear = st.button("ล้างแชท", key="corner_chat_clear", use_container_width=True)
+
+            if clear:
+                st.session_state.corner_chat_msgs = []
+                st.session_state.corner_chat_text = ""
+                st.rerun()
+
+            if send and st.session_state.corner_chat_text.strip():
+                user_text = st.session_state.corner_chat_text.strip()
+                st.session_state.corner_chat_msgs.append({"role": "user", "content": user_text})
+                st.session_state.corner_chat_text = ""
+
+                ctx = st.session_state.get("app_ctx", {"page": "unknown"})
+                with st.spinner("กำลังคิด..."):
+                    ans = _ask_gemini(ctx, st.session_state.corner_chat_msgs, user_text)
+
+                st.session_state.corner_chat_msgs.append({"role": "assistant", "content": ans})
+                st.rerun()
+
+        # float กล่องแชท (เหนือปุ่ม)
+        box.float(
+            float_css_helper(
+                right="1rem",
+                bottom="5.2rem",
+                width="380px",
+                padding="0.75rem",
+                border="1px solid rgba(255,255,255,0.18)",
+                background="rgba(20,20,20,0.92)" if st.get_option("theme.base") == "dark" else "white",
+            )
+            + "max-height: 65vh; overflow: auto;"
+        )
 # ============================
 # จัดการไฟล์สถิติ
 # ============================
@@ -529,11 +670,21 @@ print(Counter.is_even(10))   # True
         ],
     },
 }
-
+def set_app_context(page: str, user: str, lesson_key: str | None = None, extra: dict | None = None):
+    ctx = {
+        "page": page,
+        "user": user or "(ไม่ระบุ)",
+        "lesson_key": lesson_key,
+        "lesson_title": lessons[lesson_key]["title"] if lesson_key in lessons else None,
+    }
+    if extra:
+        ctx.update(extra)
+    st.session_state.app_ctx = ctx
 # ============================
 # แอปหลัก Streamlit
 # ============================
 st.set_page_config(page_title="Python Learning App — Detailed", layout="wide")
+float_init()
 st.sidebar.title("📚 เมนูหลัก")
 # --- ชื่อผู้ใช้สำหรับบันทึกสถิติ ---
 default_name = st.session_state.get("user_name", "")
@@ -544,6 +695,7 @@ page = st.sidebar.radio("เลือกหน้า", ["Home", "Lessons", "Quiz
 history = load_history()
 
 if page == "Home":
+    set_app_context(page, st.session_state.get("user_name",""))
     st.title("🐍 Python Learning App ")
     st.write(
         "ฉบับละเอียด: บทเรียนทุกหัวข้อมี Objectives, Key ideas, Examples, Pitfalls, "
@@ -555,6 +707,9 @@ if page == "Home":
 elif page == "Lessons":
     st.title("📘 บทเรียน Python ")
     key = st.selectbox("เลือกบทเรียน", list(lessons.keys()), format_func=lambda k: lessons[k]["title"])
+    # ส่งเฉพาะส่วนต้น ๆ ของบทเรียนกัน prompt ยาวเกิน
+    lesson_excerpt = lessons[key]["content"][:1200]
+    set_app_context(page, st.session_state.get("user_name",""), lesson_key=key, extra={"lesson_excerpt": lesson_excerpt})
     st.subheader(lessons[key]["title"])
     st.markdown(lessons[key]["content"])
     # ----- Inline Playground (per-lesson) -----
@@ -636,6 +791,7 @@ elif page == "Quiz":
         list(lessons.keys()),
         format_func=lambda k: lessons[k]["title"]
     )
+    set_app_context(page, st.session_state.get("user_name",""), lesson_key=key, extra={"quiz_questions": len(lessons[key].get("quiz", []))})
     questions = lessons[key].get("quiz", [])
 
     if not questions:
@@ -663,6 +819,7 @@ elif page == "Quiz":
             save_history(history)
 
 elif page == "Dashboard":
+    set_app_context(page, st.session_state.get("user_name",""), extra={"records": len(history)})
     st.title("📊 สถิติของคุณ")
     if not history:
         st.info("ยังไม่มีบันทึกผลการทดสอบ")
@@ -705,5 +862,7 @@ elif page == "Dashboard":
         st.write("### คะแนนเฉลี่ยแยกตามบทเรียน")
         by_lesson = df.groupby("บทเรียน", as_index=False)["ร้อยละ (%)"].mean().sort_values("ร้อยละ (%)", ascending=False)
         st.bar_chart(by_lesson.set_index("บทเรียน"))
+
+corner_chat()
 
 
