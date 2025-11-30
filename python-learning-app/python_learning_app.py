@@ -147,21 +147,17 @@ def corner_chat():
 
                 st.session_state.corner_chat_msgs.append({"role": "assistant", "content": ans})
                 st.rerun()
-
-                css = float_css_helper(
-                    right="1rem",
-                    bottom="5.2rem",
-                    width="380px",
-                    padding="0.75rem",
-                ) + """
-                background-color:#000000 !important;
-                border:1px solid rgba(255,255,255,0.22) !important;
-                border-radius:16px !important;
-                box-shadow:0 18px 44px rgba(0,0,0,0.65) !important;
-                max-height:65vh; overflow:auto;
-                """
-                
-                box.float(css)
+                box.float(
+                    float_css_helper(
+                        right="1rem",
+                        bottom="5.2rem",
+                        width="380px",
+                        padding="0.75rem",
+                        border="1px solid rgba(255,255,255,0.22)",
+                        background="#000000",
+                    )
+                    + "max-height: 65vh; overflow: auto;"
+                )
 
 # ============================
 # จัดการไฟล์สถิติ
