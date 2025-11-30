@@ -7,6 +7,111 @@ import io, contextlib, traceback
 from google import genai
 from google.genai import types
 from streamlit_float import float_init, float_css_helper
+from passlib.hash import bcrypt
+from passlib.hash import bcrypt_sha256
+
+USERS_DIR = "data"
+USERS_FILE = os.path.join(USERS_DIR, "users.json")
+
+def _load_users():
+    os.makedirs(USERS_DIR, exist_ok=True)
+    if os.path.exists(USERS_FILE):
+        try:
+            with open(USERS_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            return {}
+    return {}
+
+def _save_users(users: dict):
+    os.makedirs(USERS_DIR, exist_ok=True)
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(users, f, ensure_ascii=False, indent=2)
+
+def _init_auth_state():
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+    if "username" not in st.session_state:
+        st.session_state.username = ""
+    if "role" not in st.session_state:
+        st.session_state.role = "guest"  # guest | user | teacher
+
+def _verify_password(plain: str, hashed: str) -> bool:
+    return bcrypt_sha256.verify(plain, hashed)  # bcrypt+sha256 :contentReference[oaicite:5]{index=5}
+
+def _hash_password(plain: str) -> str:
+    return bcrypt_sha256.hash(plain)  # :contentReference[oaicite:6]{index=6}
+
+def auth_screen(allow_signup: bool = True):
+    """หน้าจอ Login/Sign up"""
+    _init_auth_state()
+    users = _load_users()
+
+    # ดึงบัญชีครูจาก secrets (ถ้ามี)
+    admin = st.secrets.get("auth_admin", {})
+    admin_u = admin.get("username")
+    admin_hash = admin.get("password_hash")
+
+    st.title("🔐 Authentication")
+
+    tab_login, tab_signup = st.tabs(["Log in", "Sign up"])
+
+    with tab_login:
+        with st.form("login_form"):
+            u = st.text_input("Username")
+            p = st.text_input("Password", type="password")
+            ok = st.form_submit_button("Log in")
+
+        if ok:
+            u = u.strip()
+
+            # 1) ครู/แอดมิน
+            if admin_u and u == admin_u and admin_hash and _verify_password(p, admin_hash):
+                st.session_state.logged_in = True
+                st.session_state.username = u
+                st.session_state.role = "teacher"
+                st.rerun()  # :contentReference[oaicite:7]{index=7}
+
+            # 2) ผู้ใช้ทั่วไปจาก users.json
+            rec = users.get(u)
+            if rec and _verify_password(p, rec["password_hash"]):
+                st.session_state.logged_in = True
+                st.session_state.username = u
+                st.session_state.role = rec.get("role", "user")
+                st.rerun()  # :contentReference[oaicite:8]{index=8}
+
+            st.error("ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
+
+    with tab_signup:
+        if not allow_signup:
+            st.info("การสมัครสมาชิกถูกปิด (ให้ครูสร้างบัญชีให้)")
+        else:
+            with st.form("signup_form"):
+                u = st.text_input("ตั้ง Username")
+                p1 = st.text_input("ตั้ง Password", type="password")
+                p2 = st.text_input("ยืนยัน Password", type="password")
+                ok = st.form_submit_button("Create account")
+
+            if ok:
+                u = u.strip()
+                if not u:
+                    st.error("กรุณากรอก Username"); return
+                if u in users or (admin_u and u == admin_u):
+                    st.error("Username นี้ถูกใช้แล้ว"); return
+                if len(p1) < 6:
+                    st.error("รหัสผ่านต้องยาวอย่างน้อย 6 ตัวอักษร"); return
+                if p1 != p2:
+                    st.error("รหัสผ่านไม่ตรงกัน"); return
+
+                users[u] = {"password_hash": _hash_password(p1), "role": "user"}
+                _save_users(users)
+                st.success("สมัครสำเร็จ ✅ ไปที่แท็บ Log in เพื่อเข้าสู่ระบบ")
+
+def require_login(allow_signup: bool = True):
+    _init_auth_state()
+    if not st.session_state.logged_in:
+        auth_screen(allow_signup=allow_signup)
+        st.stop()  # กันไม่ให้หน้าอื่นรันต่อ
 
 @st.cache_resource
 def get_gemini_client():
@@ -683,30 +788,6 @@ print(Counter.is_even(10))   # True
         ],
     },
 }
-def require_gmail_only():
-    if not st.user.is_logged_in:
-        st.header("🔒 แอปนี้ต้องล็อกอินด้วย Google")
-        if st.button("Log in with Google"):
-            st.login()  # ใช้ provider ที่ตั้งค่าไว้ใน [auth]
-        st.stop()
-
-    # ล็อกอินแล้ว -> บังคับให้เป็น @gmail.com เท่านั้น
-    email = (getattr(st.user, "email", "") or "").lower()
-    if not email.endswith("@gmail.com"):
-        st.error("อนุญาตเฉพาะบัญชี @gmail.com เท่านั้น")
-        if st.button("Log out"):
-            st.logout()
-        else:
-            st.logout()
-        st.stop()
-
-    # ผ่านเงื่อนไขแล้ว
-    st.caption(f"Logged in as: {email}")
-    if st.button("Log out"):
-        st.logout()
-        st.stop()
-
-
 def set_app_context(page: str, user: str, lesson_key: str | None = None, extra: dict | None = None):
     ctx = {
         "page": page,
@@ -717,20 +798,31 @@ def set_app_context(page: str, user: str, lesson_key: str | None = None, extra: 
     if extra:
         ctx.update(extra)
     st.session_state.app_ctx = ctx
-require_gmail_only()
 # ============================
 # แอปหลัก Streamlit
 # ============================
 st.set_page_config(page_title="Python Learning App — Detailed", layout="wide")
+require_login(allow_signup=True)
 float_init()
 st.sidebar.title("📚 เมนูหลัก")
 # --- ชื่อผู้ใช้สำหรับบันทึกสถิติ ---
-default_name = st.session_state.get("user_name", "")
-user_name = st.sidebar.text_input("👤 ชื่อผู้ทำแบบทดสอบ", value=default_name, placeholder="เช่น สุนันทา / Sunanta")
+default_name = st.session_state.get("username", "")
+user_name = st.sidebar.text_input("👤 ชื่อผู้ทำแบบทดสอบ", value=default_name)
+st.session_state.user_name = user_name.strip()
 # อัปเดต session_state ตลอด
 st.session_state.user_name = user_name.strip()
+st.sidebar.caption(f"ผู้ใช้: {st.session_state.get('username','')} ({st.session_state.get('role','')})")
+if st.sidebar.button("Logout"):
+    st.session_state.logged_in = False
+    st.session_state.username = ""
+    st.session_state.role = "guest"
+    st.rerun()  # :contentReference[oaicite:11]{index=11}
 page = st.sidebar.radio("เลือกหน้า", ["Home", "Lessons", "Quiz", "Dashboard"])
 history = load_history()
+if st.sidebar.button("Logout"):
+    st.session_state.logged_in = False
+    st.session_state.username = ""
+    st.rerun()
 
 if page == "Home":
     set_app_context(page, st.session_state.get("user_name",""))
@@ -902,6 +994,7 @@ elif page == "Dashboard":
         st.bar_chart(by_lesson.set_index("บทเรียน"))
 
 corner_chat()
+
 
 
 
