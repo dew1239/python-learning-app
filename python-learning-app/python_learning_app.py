@@ -819,10 +819,6 @@ if st.sidebar.button("Logout"):
     st.rerun()  # :contentReference[oaicite:11]{index=11}
 page = st.sidebar.radio("เลือกหน้า", ["Home", "Lessons", "Quiz", "Dashboard"])
 history = load_history()
-if st.sidebar.button("Logout", key="sidebar_logout"):
-    st.session_state.logged_in = False
-    st.session_state.username = ""
-    st.rerun()
 if page == "Home":
     set_app_context(page, st.session_state.get("user_name",""))
     st.title("🐍 Python Learning App ")
@@ -993,6 +989,7 @@ elif page == "Dashboard":
         st.bar_chart(by_lesson.set_index("บทเรียน"))
 
 corner_chat()
+
 
 
 
