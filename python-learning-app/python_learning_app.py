@@ -683,6 +683,30 @@ print(Counter.is_even(10))   # True
         ],
     },
 }
+def require_gmail_only():
+    if not st.user.is_logged_in:
+        st.header("🔒 แอปนี้ต้องล็อกอินด้วย Google")
+        if st.button("Log in with Google"):
+            st.login()  # ใช้ provider ที่ตั้งค่าไว้ใน [auth]
+        st.stop()
+
+    # ล็อกอินแล้ว -> บังคับให้เป็น @gmail.com เท่านั้น
+    email = (getattr(st.user, "email", "") or "").lower()
+    if not email.endswith("@gmail.com"):
+        st.error("อนุญาตเฉพาะบัญชี @gmail.com เท่านั้น")
+        if st.button("Log out"):
+            st.logout()
+        else:
+            st.logout()
+        st.stop()
+
+    # ผ่านเงื่อนไขแล้ว
+    st.caption(f"Logged in as: {email}")
+    if st.button("Log out"):
+        st.logout()
+        st.stop()
+
+
 def set_app_context(page: str, user: str, lesson_key: str | None = None, extra: dict | None = None):
     ctx = {
         "page": page,
@@ -877,6 +901,7 @@ elif page == "Dashboard":
         st.bar_chart(by_lesson.set_index("บทเรียน"))
 
 corner_chat()
+
 
 
 
