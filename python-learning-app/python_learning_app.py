@@ -148,18 +148,18 @@ def corner_chat():
                 st.session_state.corner_chat_msgs.append({"role": "assistant", "content": ans})
                 st.rerun()
 
-        # float กล่องแชท (เหนือปุ่ม)
-        box.float(
-            float_css_helper(
-                right="1rem",
-                bottom="5.2rem",
-                width="380px",
-                padding="0.75rem",
-                border="1px solid rgba(255,255,255,0.18)",
-                background="rgba(20,20,20,0.92)" if st.get_option("theme.base") == "dark" else "white",
+            box.float(
+                float_css_helper(
+                    right="1rem",
+                    bottom="5.2rem",
+                    width="380px",
+                    padding="0.75rem",
+                    border="1px solid rgba(255,255,255,0.22)",
+                    background="#000000" if st.get_option("theme.base") == "dark" else "white",
+                )
+                + "max-height: 65vh; overflow: auto;"
             )
-            + "max-height: 65vh; overflow: auto;"
-        )
+
 # ============================
 # จัดการไฟล์สถิติ
 # ============================
@@ -878,6 +878,7 @@ elif page == "Dashboard":
         st.bar_chart(by_lesson.set_index("บทเรียน"))
 
 corner_chat()
+
 
 
 
