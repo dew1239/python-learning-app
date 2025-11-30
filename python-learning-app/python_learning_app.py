@@ -147,7 +147,7 @@ def corner_chat():
 
                 st.session_state.corner_chat_msgs.append({"role": "assistant", "content": ans})
                 st.rerun()
-                box.float(
+            box.float(
                     float_css_helper(
                         right="1rem",
                         bottom="5.2rem",
@@ -157,7 +157,7 @@ def corner_chat():
                         background="#000000",
                     )
                     + "max-height: 65vh; overflow: auto;"
-                )
+            )
 
 # ============================
 # จัดการไฟล์สถิติ
@@ -877,6 +877,7 @@ elif page == "Dashboard":
         st.bar_chart(by_lesson.set_index("บทเรียน"))
 
 corner_chat()
+
 
 
 
