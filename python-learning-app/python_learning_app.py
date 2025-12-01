@@ -734,9 +734,6 @@ require_username_only()
 st.sidebar.title("📚 เมนูหลัก")
 
 default_name = st.session_state.get("user_name", "")
-st.session_state.user_name = user_name.strip()
-st.session_state.username = st.session_state.user_name # compatibility
-
 st.sidebar.caption(f"ผู้ใช้: {st.session_state.get('user_name','') or '(ไม่ระบุ)'}")
 page = st.sidebar.radio("เลือกหน้า", ["Home", "Lessons", "Quiz", "Dashboard"])
 history = load_history()
@@ -910,6 +907,7 @@ elif page == "Dashboard":
         st.bar_chart(by_lesson.set_index("บทเรียน"))
 
 corner_chat()
+
 
 
 
