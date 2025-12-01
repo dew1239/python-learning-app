@@ -734,7 +734,6 @@ require_username_only()
 st.sidebar.title("📚 เมนูหลัก")
 
 default_name = st.session_state.get("user_name", "")
-user_name = st.sidebar.text_input("👤 Username", value=default_name)
 st.session_state.user_name = user_name.strip()
 st.session_state.username = st.session_state.user_name # compatibility
 
@@ -911,6 +910,7 @@ elif page == "Dashboard":
         st.bar_chart(by_lesson.set_index("บทเรียน"))
 
 corner_chat()
+
 
 
 
