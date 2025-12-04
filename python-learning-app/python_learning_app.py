@@ -301,6 +301,16 @@ _total = 99
 """,
         "quiz": [
             {"question": "ชื่อตัวแปรใดถูกต้องตามกฎ?", "choices": ["2name", "first_name", "class"], "answer": "first_name"},
+            {
+            "question": """พิจารณาโค้ด Python ต่อไปนี้:\n\n```python\nname = \"Alice\"\nage = 30\nis_student = False\nprint(\"Name:\", name, \"Age:\", age, \"Student Status:\", is_student)\n```\n\nข้อใดคือผลลัพธ์ที่ถูกต้องที่สุดจากโค้ดด้านบน?""",
+            "choices": [
+            "Name:AliceAge:30Student Status:False",
+            "Name: Alice Age: 30 Student Status: False",
+            "('Name:', 'Alice', 'Age:', 30, 'Student Status:', False)",
+            "Name: AliceAge: 30Student Status: False",
+            ],
+            "answer": "Name: Alice Age: 30 Student Status: False",
+            },
         ],
     },
 
@@ -926,6 +936,7 @@ elif page == "Dashboard":
         st.bar_chart(by_lesson.set_index("บทเรียน"))
 
 corner_chat()
+
 
 
 
