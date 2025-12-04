@@ -251,6 +251,15 @@ print(f"{pi:.2f}")  # 3.14
         "quiz": [
             {"question": "อาร์กิวเมนต์ใดของ print ใช้เปลี่ยนตัวคั่นค่า?", "choices": ["end", "sep", "fmt"], "answer": "sep"},
             {"question": "f-string ต้องขึ้นต้นด้วยอะไร?", "choices": ["s", "f", "r"], "answer": "f"},
+            {"question": """พิจารณาโค้ด Python ต่อไปนี้:\n\n```python\nx = 10\ny = 20\nprint(f\"Value: {x}\", y, \"End\", sep=\"\\n***\\n\")\n```\n\nข้อใดคือผลลัพธ์ที่ถูกต้องที่สุดจากโค้ดด้านบน?""",
+            "choices": [
+            "Value: 10 20 End",
+            "Value: 10 20 End",
+            "Value: 10\n\n20\n\n\nEnd",
+            "Value: 10\\n***\\n20\\n***\\nEnd",
+            ],
+            "answer": "ง. Value: 10\\n***\\n20\\n***\\nEnd",
+            },
         ],
     },
 
@@ -907,6 +916,7 @@ elif page == "Dashboard":
         st.bar_chart(by_lesson.set_index("บทเรียน"))
 
 corner_chat()
+
 
 
 
