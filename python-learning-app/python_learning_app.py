@@ -794,7 +794,7 @@ st.sidebar.title("📚 เมนูหลัก")
 
 default_name = st.session_state.get("user_name", "")
 st.sidebar.caption(f"ผู้ใช้: {st.session_state.get('user_name','') or '(ไม่ระบุ)'}")
-page = st.sidebar.radio("เลือกหน้า", ["Home", "Lessons", "Quiz", "Dashboard"])
+page = st.sidebar.radio("เลือกหน้า", ["Home", "Lessons", "Quiz","Exam","Dashboard"])
 history = load_history()
 if page == "Home":
     set_app_context(page, st.session_state.get("user_name",""))
@@ -964,8 +964,76 @@ elif page == "Dashboard":
         st.write("### คะแนนเฉลี่ยแยกตามบทเรียน")
         by_lesson = df.groupby("บทเรียน", as_index=False)["ร้อยละ (%)"].mean().sort_values("ร้อยละ (%)", ascending=False)
         st.bar_chart(by_lesson.set_index("บทเรียน"))
+elif page == "Exam":
+    set_app_context(page, st.session_state.get("user_name",""))
+    st.title("📝 แบบทดสอบรวมทุกบท")
+
+    # รวมคำถามทุกบท (และจำว่าเป็นคำถามของบทไหน)
+    all_questions = []
+    for lesson_key, lesson in lessons.items():
+        for q in lesson.get("quiz", []):
+            all_questions.append({
+                "lesson": lesson_key,   # เก็บ key บทเรียน
+                "question": q["question"],
+                "choices": q["choices"],
+                "answer": q["answer"],
+            })
+
+    if not all_questions:
+        st.info("ยังไม่มีคำถามในระบบเลย ลองเพิ่มคำถามในแต่ละบทก่อนนะครับ 🙂")
+    else:
+        st.write(f"พบคำถามทั้งหมด **{len(all_questions)} ข้อ** จากทุกบทเรียน")
+
+        user_answers = []
+        for i, q in enumerate(all_questions):
+            lesson_title = lessons[q["lesson"]]["title"]
+            st.write(f"**ข้อที่ {i+1}**  _({lesson_title})_")
+            st.write(q["question"])
+            choice = st.radio(
+                "เลือกคำตอบ",
+                q["choices"],
+                key=f"exam_q_{i}",
+                label_visibility="collapsed",  # ไม่ต้องโชว์ label เดิมเยอะ ๆ
+            )
+            user_answers.append((q, choice))
+
+        if st.button("✅ ส่งคำตอบข้อสอบรวมทุกบท"):
+            total = len(user_answers)
+            correct = sum(1 for q, c in user_answers if c == q["answer"])
+            st.success(f"คุณได้คะแนนรวม {correct} / {total} ข้อ 🎉")
+
+            # ทำตารางสำหรับคำนวณคะแนนแยกตามบทเรียน
+            rows = []
+            for q, c in user_answers:
+                is_correct = int(c == q["answer"])
+                rows.append({
+                    "lesson": q["lesson"],
+                    "ถูก": is_correct,
+                    "รวม": 1,
+                })
+
+            df = pd.DataFrame(rows)
+            by_lesson = (
+                df.groupby("lesson", as_index=False)
+                  .agg({"ถูก": "sum", "รวม": "sum"})
+            )
+            by_lesson["ร้อยละ"] = by_lesson["ถูก"] / by_lesson["รวม"] * 100
+            by_lesson["บทเรียน"] = by_lesson["lesson"].map(
+                lambda k: lessons[k]["title"]
+            )
+
+            st.write("### 📊 สรุปคะแนนแยกตามบทเรียน (ข้อสอบรวมทุกบท)")
+            st.dataframe(
+                by_lesson[["บทเรียน", "ถูก", "รวม", "ร้อยละ"]],
+                hide_index=True,
+            )
+
+            st.write("### กราฟร้อยละคะแนนแยกตามบทเรียน")
+            chart_df = by_lesson.set_index("บทเรียน")[["ร้อยละ"]]
+            st.bar_chart(chart_df)
 
 corner_chat()
+
 
 
 
