@@ -389,6 +389,16 @@ print(bool(""), bool(0), bool("ok"))
             ],
             "answer": "1",
             },
+            {
+            "question": """พิจารณาโค้ด Python ต่อไปนี้:\n\n```python\nA = int(True)\nB = int(False)\nC = float(True)\nprint(A + B + C)\n```\n\nข้อใดคือผลลัพธ์ที่โค้ดข้างต้นจะแสดงออกมา?""",
+            "choices": [
+            "2",
+            "2.0",
+            "1.0",
+            "1",
+            ],
+            "answer": "2.0",
+            },
         ],
     },
 
@@ -956,6 +966,7 @@ elif page == "Dashboard":
         st.bar_chart(by_lesson.set_index("บทเรียน"))
 
 corner_chat()
+
 
 
 
